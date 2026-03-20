@@ -1,6 +1,6 @@
 # SPQueue
 
-**TODO: Add description**
+A Simple Persistent Queue for Elixir.
 
 ## Installation
 
