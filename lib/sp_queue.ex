@@ -587,7 +587,12 @@ defmodule SPQueue do
     state
   end
 
-  defp queue_base_dir(%__MODULE__{name: name, base_dir: base_dir} = _state) do
+  @doc """
+  Return the full path to the directory where the queue's files are stored.
+
+  Takes the `GenServer` state of `SPQueue` as argument.
+  """
+  def queue_base_dir(%__MODULE__{name: name, base_dir: base_dir} = _state) do
     path = Path.join(base_dir, to_string(name))
 
     if !File.exists?(path) do
