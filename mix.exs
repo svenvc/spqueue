@@ -1,10 +1,12 @@
 defmodule SPQueue.MixProject do
   use Mix.Project
 
+  @github_url "https://github.com/svenvc/spqueue"
+
   def project do
     [
       app: :spqueue,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -15,7 +17,7 @@ defmodule SPQueue.MixProject do
 
       # docs
       name: "SPQueue",
-      source_url: "https://github.com/svenvc/spqueue",
+      source_url: @github_url,
       docs: docs()
     ]
   end
@@ -46,7 +48,7 @@ defmodule SPQueue.MixProject do
       files: ~w(lib test script mix.exs README.md LICENSE),
       licenses: ["MIT"],
       links: %{
-        "GitHub" => "https://github.com/svenvc/spqueue"
+        "GitHub" => @github_url
       }
     ]
   end

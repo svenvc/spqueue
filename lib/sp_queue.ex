@@ -2,23 +2,23 @@ defmodule SPQueue do
   use GenServer
 
   @moduledoc """
-  A persistent FIFO queue
+  SPQueue is a persistent FIFO queue.
 
-  You add or enqueue items at the end of the queue.
-  You remove or dequeue items from the head of the queue.
+  You add or `enqueue/2` items at the end of the queue.
+  You remove or `dequeue/2` items from the head of the queue.
 
   This is a persistent queue: it stores its contents on files
-  in a directory base_dir/name so that it can recover after a
+  in a directory `base_dir`/`name` so that it can recover after a
   restart or failure, and can grow without using lots of memory.
 
-  Items should be maps than can be converted to JSON.
+  Items should be maps than can be converted to `JSON`.
 
-  The implementation uses a up to number_of_segments each of segment_size.
-  There is a limit, number_of_segments * segment_size, of items in the queue.
+  The implementation uses a up to `number_of_segments` each of `segment_size`.
+  There is a limit, `number_of_segments` * `segment_size`, of items in the queue.
 
-  Only one or two segments are kept in memory, the first_segment
+  Only one or two segments are kept in memory, the `first_segment`
   where dequeue is happening and possible enqueue when there is only
-  one segment. If there is more than one segment, last_segment
+  one segment. If there is more than one segment, `last_segment`
   is where enqueue is happening. In the case of more than two segments,
   the intervening ones are not kept in memory and are loaded as needed.
 
@@ -36,8 +36,8 @@ defmodule SPQueue do
   a head_r, try to process an item, and then dequeue it on the condition
   that the id is still the same.
 
-  Optionally, a delegate can be specified, a process that will be sent
-  the :enqueued message after each :enqueue operation. The delegate can
+  Optionally, a `delegate` can be specified, a process that will be sent
+  the `:enqueued` message after each enqueue operation. The delegate can
   be a pid or an atom name of a registered process which is looked up each time.
   """
 
@@ -61,12 +61,14 @@ defmodule SPQueue do
   # initialization
 
   @doc """
+  Initialize an `SPQueue` process's `GenServer` state
+
   The following options are provided:
-  - name: the name of the queue (an atom), also used as name for the genserver and the sub directory
-  - base_dir: the base path under which queue sub directories will be created
-  - segment_size: the maximum number of items in a segment
-  - number_of_segments: the maximum number of segments
-  - delegate: the process to send :enqueued when items are added
+  - `name`: the name of the queue (an atom), also used as name for the genserver and the sub directory
+  - `base_dir`: the base path under which queue sub directories will be created
+  - `segment_size`: the maximum number of items in a segment
+  - `number_of_segments`: the maximum number of segments
+  - `delegate`: the process to send :enqueued when items are added
   """
   @impl true
   def init(opts) do
@@ -88,14 +90,27 @@ defmodule SPQueue do
     {:ok, initial_state}
   end
 
+  @doc """
+  Start an `SPQueue` as a linked process
+
+  See `init/1` for the list of options
+  """
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, opts)
   end
 
+  @doc """
+  Start an `SPQueue` process without linking
+
+  See `init/1` for the list of options
+  """
   def start(opts) do
     GenServer.start(__MODULE__, opts, opts)
   end
 
+  @doc """
+  Stop an `SPQueue` process
+  """
   def stop(pq) do
     GenServer.stop(pq)
   end
@@ -104,8 +119,10 @@ defmodule SPQueue do
 
   @doc """
   Enqueue msg on queue pq, i.e. add it at the end.
+
   The queue is identified by a pid or a genserver name.
-  Msg should be a map that can be JSON encoded.
+  Msg should be a map that can be `JSON` encoded.
+
   Returns msg on success and nil when the queue is full.
   """
   def enqueue(pq, msg) when is_map(msg) do
@@ -117,10 +134,13 @@ defmodule SPQueue do
 
   @doc """
   Enqueue msg on queue pq, i.e. add it at the end.
+
   The queue is identified by a pid or a genserver name.
-  Msg should be a map that can be JSON encoded.
-  Returns {:ok, %{"id" => id, "ts" => ts, "msg" => msg}} on success,
-  or {:error, :full} when the queue is full.
+  Msg should be a map that can be `JSON` encoded.
+
+  Returns `{:ok, %{"id" => id, "ts" => ts, "msg" => msg}}` on success.
+
+  Return `{:error, :full}` when the queue is full.
   """
   def enqueue_r(pq, msg) when is_map(msg) do
     GenServer.call(pq, {:enqueue, msg})
@@ -128,13 +148,16 @@ defmodule SPQueue do
 
   @doc """
   Dequeue a msg from queue pq, i.e. remove it from the head.
+
   The queue is identified by a pid or a genserver name.
+
   Returns a msg map on success, nil when the queue is empty.
-  The boolean ack: option allows to make a difference between
+
+  The boolean `ack:` option allows to make a difference between
   successful message consumption or message rejection.
-  Optionally an id: can be specified for the expected internal id,
-  which can be obtained from enqueue_r or head_r.
-  If the id: does not match, nil is returned and no dequeue happens.
+  Optionally an `id:` can be specified for the expected internal id,
+  which can be obtained from `enqueue_r/2` or `head_r/1`.
+  If the `id:` does not match, nil is returned and no dequeue happens.
   """
   def dequeue(pq, opts \\ [ack: true]) do
     case dequeue_r(pq, opts) do
@@ -146,14 +169,18 @@ defmodule SPQueue do
 
   @doc """
   Dequeue a msg from queue pq, i.e. remove it from the head.
+
   The queue is identified by a pid or a genserver name.
-  Returns {:ok, %{"id" => id, "ts" => ts, "msg" => msg}} on success,
-  Returns {:error, :empty} when the queue is empty.
-  The boolean ack: option allows to make a difference between
+
+  Returns `{:ok, %{"id" => id, "ts" => ts, "msg" => msg}}` on success,
+
+  Returns `{:error, :empty}` when the queue is empty.
+
+  The boolean `ack:` option allows to make a difference between
   successful message consumption or message rejection.
-  Optionally an id: can be specified for the expected internal id,
-  which can be obtained from enqueue_r or head_r.
-  If the id: does not match, {:error, :mismatch} is returned and no dequeue happens.
+  Optionally an `id:` can be specified for the expected internal id,
+  which can be obtained from `enqueue_r/2` or `head_r/1`.
+  If the `id:` does not match, `{:error, :mismatch}` is returned and no dequeue happens.
   """
   def dequeue_r(pq, opts \\ [ack: true]) do
     GenServer.call(pq, {:dequeue, Keyword.merge([ack: true], opts)})
@@ -161,7 +188,10 @@ defmodule SPQueue do
 
   @doc """
   Return the head of queue pq, the message that would be the result of dequeue,
-  without actually removing it. Return nil if the queue is empty.
+  without actually removing it.
+
+  Return nil if the queue is empty.
+
   The queue is identified by a pid or a genserver name.
   """
   def head(pq) do
@@ -174,11 +204,15 @@ defmodule SPQueue do
   @doc """
   Return the head of queue pq, the message that would be the result of dequeue_r,
   without actually removing it.
+
   The queue is identified by a pid or a genserver name.
-  Returns {:ok, %{"id" => id, "ts" => ts, "msg" => msg}} on success.
-  id is the internal identification that can be used in dequeue_r
-  to make sure the same message is removed that was read with head_r.
-  Return {:error, :empty} if the queue is empty.
+
+  Returns `{:ok, %{"id" => id, "ts" => ts, "msg" => msg}}` on success.
+
+  `id` is the internal identification that can be used in `dequeue_r/2`
+  to make sure the same message is removed that was read with `head_r/1`.
+
+  Return `{:error, :empty}` if the queue is empty.
   """
   def head_r(pq) do
     GenServer.call(pq, :head)
@@ -186,6 +220,7 @@ defmodule SPQueue do
 
   @doc """
   Return whether queue pq is empty or not.
+
   The queue is identified by a pid or a genserver name.
   """
   def empty?(pq) do
@@ -194,6 +229,7 @@ defmodule SPQueue do
 
   @doc """
   Return the number of items or messages in queue pq.
+
   The queue is identified by a pid or a genserver name.
   """
   def count(pq) do
@@ -202,6 +238,7 @@ defmodule SPQueue do
 
   @doc """
   Reset queue pq to an empty state, both in memory and on disk.
+
   The queue is identified by a pid or a genserver name.
   """
   def reset(pq) do
@@ -384,13 +421,13 @@ defmodule SPQueue do
 
   # internals
 
-  def queued_count(
+  defp queued_count(
         %__MODULE__{enqueue_count: enqueue_count, dequeue_count: dequeue_count} = _state
       ) do
     enqueue_count - dequeue_count
   end
 
-  def segments_count(
+  defp segments_count(
         %__MODULE__{
           first_segment_id: first_segment_id,
           last_segment_id: last_segment_id
@@ -399,17 +436,17 @@ defmodule SPQueue do
     last_segment_id - first_segment_id + 1
   end
 
-  def queue_empty?(state) do
+  defp queue_empty?(state) do
     queued_count(state) == 0
   end
 
-  def full?(
+  defp full?(
         %__MODULE__{segment_size: segment_size, number_of_segments: number_of_segments} = state
       ) do
     queued_count(state) >= segment_size * number_of_segments
   end
 
-  def load_state_from_disk(state) do
+  defp load_state_from_disk(state) do
     base_dir_path = queue_base_dir(state)
 
     files =
@@ -498,12 +535,12 @@ defmodule SPQueue do
     end
   end
 
-  def load_segment(state, segment_id) do
+  defp load_segment(state, segment_id) do
     path = Path.join(queue_base_dir(state), "enqueue-#{segment_id}.ndjson")
     File.stream!(path) |> Enum.map(fn line -> JSON.decode!(line) end)
   end
 
-  def log_enqueue(
+  defp log_enqueue(
         %__MODULE__{enqueue_count: enqueue_count, segment_size: segment_size} = state,
         json
       ) do
@@ -512,7 +549,7 @@ defmodule SPQueue do
     append_ndjson(json, path)
   end
 
-  def log_dequeue(
+  defp log_dequeue(
         %__MODULE__{dequeue_count: dequeue_count, segment_size: segment_size} = state,
         json
       ) do
@@ -521,7 +558,7 @@ defmodule SPQueue do
     append_ndjson(json, path)
   end
 
-  def gc_unused_segments(%__MODULE__{first_segment_id: first_segment_id} = state) do
+  defp gc_unused_segments(%__MODULE__{first_segment_id: first_segment_id} = state) do
     base_dir_path = queue_base_dir(state)
 
     # all segment files (enqueue & dequeue) with id less than
@@ -540,7 +577,7 @@ defmodule SPQueue do
     state
   end
 
-  def notify_delegate(state) do
+  defp notify_delegate(state) do
     delegate = state.delegate
 
     if delegate do
@@ -550,7 +587,7 @@ defmodule SPQueue do
     state
   end
 
-  def queue_base_dir(%__MODULE__{name: name, base_dir: base_dir} = _state) do
+  defp queue_base_dir(%__MODULE__{name: name, base_dir: base_dir} = _state) do
     path = Path.join(base_dir, to_string(name))
 
     if !File.exists?(path) do
@@ -560,21 +597,17 @@ defmodule SPQueue do
     path
   end
 
-  def segment_id_from_file(name) do
+  defp segment_id_from_file(name) do
     Path.rootname(name) |> String.split("-") |> List.last() |> String.to_integer()
   end
 
   # IO support
 
-  def read_all_ndjson(file) do
-    File.stream!(file) |> Enum.map(fn line -> JSON.decode!(line) end)
-  end
-
-  def read_last_ndjson(file) do
+  defp read_last_ndjson(file) do
     File.stream!(file) |> Enum.reduce(nil, fn line, _last -> line end) |> JSON.decode!()
   end
 
-  def append_ndjson(io_data, file) do
+  defp append_ndjson(io_data, file) do
     File.write!(file, [io_data, "\n"], [:append])
   end
 end
