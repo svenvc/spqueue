@@ -43,7 +43,8 @@ defmodule SPQueue.MixProject do
 
   defp package do
     [
-      licenses: "MIT",
+      files: ~w(lib test script mix.exs README.md LICENSE),
+      licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/svenvc/spqueue"
       }
