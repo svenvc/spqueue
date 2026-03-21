@@ -118,12 +118,23 @@ defmodule SPQueue do
   # client API
 
   @doc """
-  Enqueue msg on queue pq, i.e. add it at the end.
+  Enqueue `msg` on queue `pq`, i.e. add it at the end.
 
   The queue is identified by a pid or a genserver name.
-  Msg should be a map that can be `JSON` encoded.
+  `Msg` should be a map that can be `JSON` encoded.
 
-  Returns msg on success and nil when the queue is full.
+  Returns `msg` on success and `nil` when the queue is full.
+
+  ## Examples
+
+      iex> {:ok, q} = SPQueue.start([])
+      iex> SPQueue.enqueue(q, %{"test" => 42})
+      %{"test" => 42}
+      iex> SPQueue.head(q)
+      %{"test" => 42}
+      iex> SPQueue.reset(q)
+      iex> SPQueue.stop(q)
+
   """
   def enqueue(pq, msg) when is_map(msg) do
     case enqueue_r(pq, msg) do
@@ -141,23 +152,48 @@ defmodule SPQueue do
   Returns `{:ok, %{"id" => id, "ts" => ts, "msg" => msg}}` on success.
 
   Return `{:error, :full}` when the queue is full.
+
+  ## Examples
+
+      iex> {:ok, q} = SPQueue.start([])
+      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.enqueue_r(q, %{"test" => 42})
+      iex> id
+      0
+      iex> msg
+      %{"test" => 42}
+      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue_r(q, id: id)
+      iex> SPQueue.reset(q)
+      iex> SPQueue.stop(q)
+
   """
   def enqueue_r(pq, msg) when is_map(msg) do
     GenServer.call(pq, {:enqueue, msg})
   end
 
   @doc """
-  Dequeue a msg from queue pq, i.e. remove it from the head.
+  Dequeue a msg from queue `pq`, i.e. remove it from the head.
 
   The queue is identified by a pid or a genserver name.
 
-  Returns a msg map on success, nil when the queue is empty.
+  Returns a msg `map` on success, `nil` when the queue is empty.
 
   The boolean `ack:` option allows to make a difference between
   successful message consumption or message rejection.
   Optionally an `id:` can be specified for the expected internal id,
   which can be obtained from `enqueue_r/2` or `head_r/1`.
-  If the `id:` does not match, nil is returned and no dequeue happens.
+  If the `id:` does not match, `nil` is returned and no dequeue happens.
+
+  ## Examples
+
+      iex> {:ok, q} = SPQueue.start([])
+      iex> SPQueue.enqueue(q, %{"test" => 42})
+      iex> SPQueue.dequeue(q)
+      %{"test" => 42}
+      iex> SPQueue.dequeue(q)
+      nil
+      iex> SPQueue.reset(q)
+      iex> SPQueue.stop(q)
+
   """
   def dequeue(pq, opts \\ [ack: true]) do
     case dequeue_r(pq, opts) do
@@ -181,18 +217,44 @@ defmodule SPQueue do
   Optionally an `id:` can be specified for the expected internal id,
   which can be obtained from `enqueue_r/2` or `head_r/1`.
   If the `id:` does not match, `{:error, :mismatch}` is returned and no dequeue happens.
+
+  ## Examples
+
+      iex> {:ok, q} = SPQueue.start([])
+      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.enqueue_r(q, %{"test" => 42})
+      iex> id
+      0
+      iex> msg
+      %{"test" => 42}
+      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue_r(q, id: id)
+      iex> SPQueue.reset(q)
+      iex> SPQueue.stop(q)
+
   """
   def dequeue_r(pq, opts \\ [ack: true]) do
     GenServer.call(pq, {:dequeue, Keyword.merge([ack: true], opts)})
   end
 
   @doc """
-  Return the head of queue pq, the message that would be the result of dequeue,
+  Return the head of queue `pq`, the message that would be the result of dequeue,
   without actually removing it.
 
-  Return nil if the queue is empty.
+  Return `nil` if the queue is empty.
 
   The queue is identified by a pid or a genserver name.
+
+  ## Examples
+
+      iex> {:ok, q} = SPQueue.start([])
+      iex> SPQueue.enqueue(q, %{"test" => 42})
+      iex> SPQueue.head(q)
+      %{"test" => 42}
+      iex> SPQueue.dequeue(q)
+      iex> SPQueue.head(q)
+      nil
+      iex> SPQueue.reset(q)
+      iex> SPQueue.stop(q)
+
   """
   def head(pq) do
     case head_r(pq) do
@@ -202,7 +264,7 @@ defmodule SPQueue do
   end
 
   @doc """
-  Return the head of queue pq, the message that would be the result of dequeue_r,
+  Return the head of queue `pq`, the message that would be the result of `dequeue_r/2`,
   without actually removing it.
 
   The queue is identified by a pid or a genserver name.
@@ -213,13 +275,27 @@ defmodule SPQueue do
   to make sure the same message is removed that was read with `head_r/1`.
 
   Return `{:error, :empty}` if the queue is empty.
+
+  ## Examples
+
+      iex> {:ok, q} = SPQueue.start([])
+      iex> SPQueue.enqueue(q, %{"test" => 42})
+      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.head_r(q)
+      iex> id
+      0
+      iex> msg
+      %{"test" => 42}
+      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue_r(q, id: id)
+      iex> SPQueue.reset(q)
+      iex> SPQueue.stop(q)
+
   """
   def head_r(pq) do
     GenServer.call(pq, :head)
   end
 
   @doc """
-  Return whether queue pq is empty or not.
+  Return whether queue `pq` is empty or not.
 
   The queue is identified by a pid or a genserver name.
   """
@@ -228,7 +304,7 @@ defmodule SPQueue do
   end
 
   @doc """
-  Return the number of items or messages in queue pq.
+  Return the number of items or messages in queue `pq`.
 
   The queue is identified by a pid or a genserver name.
   """
@@ -237,7 +313,7 @@ defmodule SPQueue do
   end
 
   @doc """
-  Reset queue pq to an empty state, both in memory and on disk.
+  Reset queue `pq` to an empty state, both in memory and on disk.
 
   The queue is identified by a pid or a genserver name.
   """
@@ -422,17 +498,17 @@ defmodule SPQueue do
   # internals
 
   defp queued_count(
-        %__MODULE__{enqueue_count: enqueue_count, dequeue_count: dequeue_count} = _state
-      ) do
+         %__MODULE__{enqueue_count: enqueue_count, dequeue_count: dequeue_count} = _state
+       ) do
     enqueue_count - dequeue_count
   end
 
   defp segments_count(
-        %__MODULE__{
-          first_segment_id: first_segment_id,
-          last_segment_id: last_segment_id
-        } = _state
-      ) do
+         %__MODULE__{
+           first_segment_id: first_segment_id,
+           last_segment_id: last_segment_id
+         } = _state
+       ) do
     last_segment_id - first_segment_id + 1
   end
 
@@ -441,8 +517,8 @@ defmodule SPQueue do
   end
 
   defp full?(
-        %__MODULE__{segment_size: segment_size, number_of_segments: number_of_segments} = state
-      ) do
+         %__MODULE__{segment_size: segment_size, number_of_segments: number_of_segments} = state
+       ) do
     queued_count(state) >= segment_size * number_of_segments
   end
 
@@ -541,18 +617,18 @@ defmodule SPQueue do
   end
 
   defp log_enqueue(
-        %__MODULE__{enqueue_count: enqueue_count, segment_size: segment_size} = state,
-        json
-      ) do
+         %__MODULE__{enqueue_count: enqueue_count, segment_size: segment_size} = state,
+         json
+       ) do
     segment_id = div(enqueue_count, segment_size)
     path = Path.join(queue_base_dir(state), "enqueue-#{segment_id}.ndjson")
     append_ndjson(json, path)
   end
 
   defp log_dequeue(
-        %__MODULE__{dequeue_count: dequeue_count, segment_size: segment_size} = state,
-        json
-      ) do
+         %__MODULE__{dequeue_count: dequeue_count, segment_size: segment_size} = state,
+         json
+       ) do
     segment_id = div(dequeue_count, segment_size)
     path = Path.join(queue_base_dir(state), "dequeue-#{segment_id}.ndjson")
     append_ndjson(json, path)
