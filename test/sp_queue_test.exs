@@ -189,6 +189,6 @@ defmodule SPQueue.Test do
   end
 
   defp queue_base_dir(pq) do
-    :sys.get_state(pq) |> SPQueue.queue_base_dir()
+    SPQueue.info(pq)[:queue_base_dir]
   end
 end

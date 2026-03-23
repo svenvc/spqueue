@@ -13,6 +13,21 @@ defmodule SPQueue do
 
   Items should be maps than can be converted to `JSON`.
 
+  ## Examples
+
+      iex> SPQueue.start(name: :my_queue)
+      iex> ~w(a b c) |> Enum.each(fn c -> SPQueue.enqueue(:my_queue, %{"what" => c}) end)
+      iex> SPQueue.count(:my_queue)
+      3
+      iex> SPQueue.dequeue(:my_queue)
+      %{"what" => "a"}
+      iex> SPQueue.head(:my_queue)
+      %{"what" => "b"}
+      iex> SPQueue.reset(:my_queue)
+      iex> SPQueue.stop(:my_queue)
+
+  ## Implementation
+
   The implementation uses a up to `number_of_segments` each of `segment_size`.
   There is a limit, `number_of_segments` * `segment_size`, of items in the queue.
 
@@ -31,10 +46,14 @@ defmodule SPQueue do
   For each session, an enqueue and dequeue count are kept.
   This count is also used as an internal id, along with a timestamp.
 
+  ## Using internal IDs
+
   The client API has a number of functions with a _r suffix that
   return this meta information. One way this can be useful is to do
   a head_r, try to process an item, and then dequeue it on the condition
   that the id is still the same.
+
+  ## Delegate receives :enqueued notifications
 
   Optionally, a `delegate` can be specified, a process that will be sent
   the `:enqueued` message after each enqueue operation. The delegate can
@@ -321,6 +340,21 @@ defmodule SPQueue do
     GenServer.call(pq, :reset)
   end
 
+  @doc """
+  Return a map with information about queue `pq`.
+
+  This includes the value of all options described in `init/1`
+  and the following properties:
+  - `queue_base_dir`: the full path to the directory where the queue's files are stored
+  - `maximum_size`: the total maxium size of the queue
+  - `count`: the number of items/messages in the queue
+
+  The queue is identified by a pid or a genserver name.
+  """
+  def info(pq) do
+    GenServer.call(pq, :info)
+  end
+
   # server API
 
   @impl true
@@ -495,6 +529,17 @@ defmodule SPQueue do
      }}
   end
 
+  @impl true
+  def handle_call(:info, {_sender, _call}, state) do
+    info =
+      Map.take(state, [:base_dir, :name, :segment_size, :number_of_segments, :delegate])
+      |> Map.put(:count, queued_count(state))
+      |> Map.put(:queue_base_dir, queue_base_dir(state))
+      |> Map.put(:maximum_size, maximum_size(state))
+
+    {:reply, info, state}
+  end
+
   # internals
 
   defp queued_count(
@@ -516,10 +561,14 @@ defmodule SPQueue do
     queued_count(state) == 0
   end
 
-  defp full?(
-         %__MODULE__{segment_size: segment_size, number_of_segments: number_of_segments} = state
+  defp full?(state) do
+    queued_count(state) >= maximum_size(state)
+  end
+
+  defp maximum_size(
+         %__MODULE__{segment_size: segment_size, number_of_segments: number_of_segments} = _state
        ) do
-    queued_count(state) >= segment_size * number_of_segments
+    segment_size * number_of_segments
   end
 
   defp load_state_from_disk(state) do
@@ -663,12 +712,7 @@ defmodule SPQueue do
     state
   end
 
-  @doc """
-  Return the full path to the directory where the queue's files are stored.
-
-  Takes the `GenServer` state of `SPQueue` as argument.
-  """
-  def queue_base_dir(%__MODULE__{name: name, base_dir: base_dir} = _state) do
+  defp queue_base_dir(%__MODULE__{name: name, base_dir: base_dir} = _state) do
     path = Path.join(base_dir, to_string(name))
 
     if !File.exists?(path) do
