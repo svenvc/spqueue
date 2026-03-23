@@ -21,6 +21,27 @@ defmodule SPQueueWorker do
   will be handled until the queue is empty.
 
   Since the worker is in its own process, it can take its time as needed.
+
+  ## Examples
+
+      iex> SPQueue.start([name: :pq, delegate: :pqw])
+      iex> parent = self()
+      iex> SPQueueWorker.start([
+      ...>   name: :pqw,
+      ...>   queue_name: :pq,
+      ...>   handler_function: fn m -> send(parent, {:msg, m}); :ack end
+      ...> ])
+      iex> SPQueue.enqueue(:pq, %{"test" => 1})
+      iex> receive do {:msg, m} -> m end
+      %{"test" => 1}
+      iex> SPQueueWorker.stop(:pqw)
+      iex> SPQueue.reset(:pq)
+      iex> SPQueue.stop(:pq)
+
+  Here we set up a worker with a handler_function that sends each message m as a tuple `{:msg, m}` to ourself.
+  The worker is connected to the named queue, while the worker is also set as delegate of the queue,
+  so that it is notified when messages/items are enqueued.
+
   """
 
   defstruct queue_name: "pq",
