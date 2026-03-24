@@ -156,17 +156,20 @@ defmodule SPQueue.Test do
   test "drain queue by worker", %{line: line} = _context do
     queue_name = String.to_atom(unique_name_for_test(line))
     worker_name = String.to_atom("test-worker-#{line}")
+    test_process = self()
 
     {:ok, worker} =
       SPQueueWorker.start(
         queue_name: queue_name,
         name: worker_name,
-        handler_function: fn _msg -> :ack end
-      )
+        handler_function: fn %{"i" => i} = _msg ->
+          if i == 1000, do: send(test_process, :done)
+          :ack
+        end)
 
     pq = start_unique(line, delegate: worker)
     1..1000 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
-    Process.sleep(10)
+    assert_receive :done
     assert(SPQueue.empty?(pq))
     stop(pq)
     SPQueueWorker.stop(worker)

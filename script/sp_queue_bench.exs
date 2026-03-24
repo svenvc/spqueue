@@ -17,6 +17,7 @@ parent = self()
       if msg["index"] == count - 1 do
         send(parent, {:done, msg})
       end
+
       :ack
     end
   )
@@ -46,7 +47,13 @@ end
     |> Enum.each(fn i ->
       Util.enqueue(
         queue,
-        %{"index" => i, "info" => "this is a benchmark", "test" => true, "xy" => [1.5, -2.5]}
+        %{
+          "index" => i,
+          "info" => "this is a benchmark",
+          "test" => true,
+          "xy" => [1.5, -2.5],
+          "q" => :rand.uniform()
+        }
       )
     end)
   end)
@@ -63,3 +70,5 @@ IO.inspect(SPQueue.empty?(queue), label: "Queue empty ?")
 
 SPQueueWorker.stop(worker)
 SPQueue.stop(queue)
+
+File.rm_rf!("pq")

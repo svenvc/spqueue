@@ -339,10 +339,13 @@ defmodule SPQueue do
   @doc """
   Reset queue `pq` to an empty state, both in memory and on disk.
 
+  With the `clean` options, the queue's base dir is removed as well.
+  This is the default.
+
   The queue is identified by a pid or a genserver name.
   """
-  def reset(pq) do
-    GenServer.call(pq, :reset)
+  def reset(pq, opts \\ [clean: true]) do
+    GenServer.call(pq, {:reset, opts})
   end
 
   @doc """
@@ -515,12 +518,16 @@ defmodule SPQueue do
   end
 
   @impl true
-  def handle_call(:reset, {_sender, _call}, state) do
+  def handle_call({:reset, opts}, {_sender, _call}, state) do
     base_dir_path = queue_base_dir(state)
 
-    File.ls!(base_dir_path)
-    |> Enum.filter(fn file -> Path.extname(file) == ".ndjson" end)
-    |> Enum.map(fn file -> File.rm!(Path.join(base_dir_path, file)) end)
+    if Keyword.get(opts, :clean, true) do
+      File.rm_rf!(base_dir_path)
+    else
+      File.ls!(base_dir_path)
+      |> Enum.filter(fn file -> Path.extname(file) == ".ndjson" end)
+      |> Enum.map(fn file -> File.rm!(Path.join(base_dir_path, file)) end)
+    end
 
     {:reply, true,
      %{
