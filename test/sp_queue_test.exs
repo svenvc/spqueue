@@ -66,10 +66,11 @@ defmodule SPQueue.Test do
 
   test "full", %{line: line} = _context do
     pq = start_unique(line)
-    1..50 |> Enum.each(fn n -> assert(SPQueue.enqueue(pq, %{"n" => n})) end)
+    max = SPQueue.info(pq)[:maximum_size]
+    1..max |> Enum.each(fn n -> assert(SPQueue.enqueue(pq, %{"n" => n})) end)
     refute(SPQueue.empty?(pq))
-    assert(SPQueue.count(pq) == 50)
-    refute(SPQueue.enqueue(pq, %{"n" => 51}))
+    assert(SPQueue.count(pq) == max)
+    refute(SPQueue.enqueue(pq, %{"n" => max + 1}))
     stop(pq)
   end
 
@@ -124,6 +125,15 @@ defmodule SPQueue.Test do
     stop(pq)
   end
 
+  test "to list conversion", %{line: line} = _context do
+    pq = start_unique(line)
+    1..10 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
+    assert(SPQueue.to_list(pq) == 1..10 |> Enum.map(fn i -> %{"i" => i} end))
+    11..50 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
+    assert(SPQueue.to_list(pq) == 1..50 |> Enum.map(fn i -> %{"i" => i} end))
+    stop(pq)
+  end
+
   test "delegate receives dequeued", %{line: line} = _context do
     pq = start_unique(line, delegate: self())
     SPQueue.enqueue(pq, %{"test" => 123})
@@ -157,18 +167,20 @@ defmodule SPQueue.Test do
     queue_name = String.to_atom(unique_name_for_test(line))
     worker_name = String.to_atom("test-worker-#{line}")
     test_process = self()
+    limit = 1000
 
     {:ok, worker} =
       SPQueueWorker.start(
         queue_name: queue_name,
         name: worker_name,
         handler_function: fn %{"i" => i} = _msg ->
-          if i == 1000, do: send(test_process, :done)
+          if i == limit, do: send(test_process, :done)
           :ack
-        end)
+        end
+      )
 
     pq = start_unique(line, delegate: worker)
-    1..1000 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
+    1..limit |> Enum.each(fn i -> SPQueue.enqueue_wait!(pq, %{"i" => i}) end)
     assert_receive :done
     assert(SPQueue.empty?(pq))
     stop(pq)

@@ -195,6 +195,48 @@ defmodule SPQueue do
   end
 
   @doc """
+  Enqueue each msg in `list_of_msgs` on queue `pq`, i.e. add them at the end, one by one.
+
+  The queue is identified by a pid or a genserver name.
+  Each msg should be a map that can be `JSON` encoded.
+
+  Returns the list of results of `enqueue/2` for each msg.
+  """
+  def enqueue_list(pq, list_of_msgs) when is_list(list_of_msgs) do
+    list_of_msgs |> Enum.map(fn msg -> enqueue(pq, msg) end)
+  end
+
+  @doc """
+  Enqueue `msg` on queue `pq`, i.e. add it at the end.
+
+  The queue is identified by a pid or a genserver name.
+  `Msg` should be a map that can be `JSON` encoded.
+
+  If the queue is full, wait `step` milliseconds to try again,
+  with `timeout = timeout - step`.
+
+  Returns `msg` on success or raise "timed_out"
+  when the queue remains full after the `timeout` has expired.
+
+  The default `timeout` is 1000 milliseconds or 1 second,
+  the default `step` is 10 milliseconds or 100 steps.
+  """
+  def enqueue_wait!(pq, msg, opts \\ [timeout: 1000, step: 10]) do
+    case enqueue(pq, msg) do
+      nil ->
+        if Keyword.get(opts, :timeout) > 0 do
+          Process.sleep(Keyword.get(opts, :step))
+          enqueue_wait!(pq, msg, Keyword.get(opts, :timeout) - Keyword.get(opts, :step))
+        else
+          raise "timed_out"
+        end
+
+      result ->
+        result
+    end
+  end
+
+  @doc """
   Dequeue a msg from queue `pq`, i.e. remove it from the head.
 
   The queue is identified by a pid or a genserver name.
@@ -361,6 +403,15 @@ defmodule SPQueue do
   """
   def info(pq) do
     GenServer.call(pq, :info)
+  end
+
+  @doc """
+  Return a list of all messages/items in queue `pq`.
+
+  The queue is identified by a pid or a genserver name.
+  """
+  def to_list(pq) do
+    GenServer.call(pq, :to_list)
   end
 
   # server API
@@ -550,6 +601,29 @@ defmodule SPQueue do
       |> Map.put(:maximum_size, maximum_size(state))
 
     {:reply, info, state}
+  end
+
+  @impl true
+  def handle_call(:to_list, {_sender, _call}, state) do
+    list =
+      case segments_count(state) do
+        1 ->
+          :queue.to_list(state.first_segment)
+
+        2 ->
+          :queue.to_list(state.first_segment) ++ :queue.to_list(state.last_segment)
+
+        _ ->
+          segments =
+            (state.first_segment_id + 1)..(state.last_segment_id - 1)
+            |> Enum.map(fn segment_id -> load_segment(state, segment_id) end)
+
+          ([:queue.to_list(state.first_segment)] ++
+             segments ++ [:queue.to_list(state.last_segment)])
+          |> Enum.concat()
+      end
+
+    {:reply, Enum.map(list, fn record -> record["msg"] end), state}
   end
 
   # internals

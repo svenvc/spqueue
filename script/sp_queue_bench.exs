@@ -28,24 +28,11 @@ parent = self()
     delegate: worker
   )
 
-defmodule Util do
-  def enqueue(q, m, t \\ 100) do
-    if !SPQueue.enqueue(q, m) do
-      if t >= 0 do
-        Process.sleep(1)
-        enqueue(q, m, t - 1)
-      else
-        raise "timed_out"
-      end
-    end
-  end
-end
-
 {us, _} =
   :timer.tc(fn ->
     0..(count - 1)
     |> Enum.each(fn i ->
-      Util.enqueue(
+      SPQueue.enqueue_wait!(
         queue,
         %{
           "index" => i,
@@ -53,7 +40,9 @@ end
           "test" => true,
           "xy" => [1.5, -2.5],
           "q" => :rand.uniform()
-        }
+        },
+        timeout: 500,
+        step: 1
       )
     end)
   end)
