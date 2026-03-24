@@ -28,8 +28,10 @@ defmodule SPQueue do
 
   ## Implementation
 
-  The implementation uses a up to `number_of_segments` each of `segment_size`.
-  There is a limit, `number_of_segments` * `segment_size`, of items in the queue.
+  The implementation splits the queue in a number of segments.
+  In total, there can maximally be `number_of_segments` segments.
+  Each segment can maximally contain `segment_size` items or messages.
+  The whole queue is limited to a maximum size of `number_of_segments` * `segment_size`.
 
   Only one or two segments are kept in memory, the `first_segment`
   where dequeue is happening and possible enqueue when there is only
@@ -46,14 +48,17 @@ defmodule SPQueue do
   For each session, an enqueue and dequeue count are kept.
   This count is also used as an internal id, along with a timestamp.
 
+  Both enqueue and dequeue are O(1).
+  Segments use Erlang's queue module for their implementation.
+
   ## Using internal IDs
 
-  The client API has a number of functions with a _r suffix that
+  The client API has a number of functions with a `_r` suffix that
   return this meta information. One way this can be useful is to do
-  a head_r, try to process an item, and then dequeue it on the condition
+  a `head_r/1`, try to process an item, and then dequeue it on the condition
   that the id is still the same.
 
-  ## Delegate receives :enqueued notifications
+  ## Delegate
 
   Optionally, a `delegate` can be specified, a process that will be sent
   the `:enqueued` message after each enqueue operation. The delegate can
