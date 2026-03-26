@@ -64,6 +64,43 @@ defmodule SPQueue.Test do
     stop(pq)
   end
 
+  test "options", %{line: line} = _context do
+    queue_name = unique_name_for_test(line)
+    tmp_dir = System.tmp_dir!()
+    number_of_segments = 5
+    segment_size = 20
+    maximum_size = number_of_segments * segment_size
+
+    {:ok, pq} =
+      SPQueue.start(
+        name: String.to_atom(queue_name),
+        base_dir: tmp_dir,
+        number_of_segments: number_of_segments,
+        segment_size: segment_size
+      )
+
+    opts = SPQueue.info(pq)
+
+    assert(opts[:count] == 0)
+    assert(opts[:maximum_size] == maximum_size)
+    assert(opts[:name] == String.to_atom(queue_name))
+    assert(opts[:queue_base_dir] == Path.join(tmp_dir, queue_name))
+
+    1..maximum_size |> Enum.each(fn i -> assert(SPQueue.enqueue(pq, %{"key" => i})) end)
+
+    opts = SPQueue.info(pq)
+
+    assert(opts[:count] == maximum_size)
+
+    1..maximum_size |> Enum.each(fn i -> assert(SPQueue.dequeue(pq) == %{"key" => i}) end)
+
+    opts = SPQueue.info(pq)
+
+    assert(opts[:count] == 0)
+
+    stop(pq)
+  end
+
   test "full", %{line: line} = _context do
     pq = start_unique(line)
     max = SPQueue.info(pq)[:maximum_size]
