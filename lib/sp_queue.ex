@@ -13,6 +13,8 @@ defmodule SPQueue do
 
   Items should be maps than can be converted to `JSON`.
 
+  The queue has a maximum size.
+
   ## Examples
 
       iex> SPQueue.start(name: :my_queue)

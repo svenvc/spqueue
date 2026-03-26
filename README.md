@@ -7,10 +7,15 @@ and you remove/dequeue items/messages from the start/head.
 
 The queue is persistent on disk, using log files in a named directory.
 
+The queue has a maximum size.
+
+This is a public Hex package at <https://hex.pm/packages/spqueue>.
+
+The docs can be found at <https://hexdocs.pm/spqueue>.
+
 ## Installation
 
-The package can be installed
-by adding `spqueue` to your list of dependencies in `mix.exs`:
+The package can be installed by adding `spqueue` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
@@ -19,5 +24,3 @@ def deps do
   ]
 end
 ```
-
-The docs can be found at <https://hexdocs.pm/spqueue>.
