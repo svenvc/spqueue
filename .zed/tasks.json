@@ -51,4 +51,8 @@
     // Represents the tags for inline runnable indicators, or spawning multiple tasks at once.
     // "tags": []
   },
+  {
+    "label": "mix run script/sp_queue_bench.exs",
+    "command": "mix run script/sp_queue_bench.exs"
+  }
 ]
