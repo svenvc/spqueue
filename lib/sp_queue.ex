@@ -18,12 +18,12 @@ defmodule SPQueue do
   ## Examples
 
       iex> SPQueue.start(name: :my_queue)
-      iex> ~w(a b c) |> Enum.each(fn c -> SPQueue.enqueue(:my_queue, %{"what" => c}) end)
+      iex> ~w(a b c) |> Enum.each(fn c -> SPQueue.enqueue!(:my_queue, %{"what" => c}) end)
       iex> SPQueue.count(:my_queue)
       3
-      iex> SPQueue.dequeue(:my_queue)
+      iex> SPQueue.dequeue!(:my_queue)
       %{"what" => "a"}
-      iex> SPQueue.head(:my_queue)
+      iex> SPQueue.head!(:my_queue)
       %{"what" => "b"}
       iex> SPQueue.reset(:my_queue)
       iex> SPQueue.stop(:my_queue)
@@ -55,10 +55,10 @@ defmodule SPQueue do
 
   ## Using internal IDs
 
-  The client API has a number of functions with a `_r` suffix that
-  return this meta information. One way this can be useful is to do
-  a `head_r/1`, try to process an item, and then dequeue it on the condition
-  that the id is still the same.
+  The client API functions `enqueue/2`, `dequeue/2` and `head/1` return a tuple
+  `{:ok, %{"id" => id, "ts" => ts, "msg" => msg}}` on success.
+  The `id` from `enqueue/2` and especially `head/1` can be used in `dequeue/2`
+  to make sure the id is still the same.
 
   ## Delegate
 
@@ -149,23 +149,23 @@ defmodule SPQueue do
   The queue is identified by a pid or a genserver name.
   `Msg` should be a map that can be `JSON` encoded.
 
-  Returns `msg` on success and `nil` when the queue is full.
+  Returns `msg` on success and raise `SPQueue.FullError` when the queue is full.
 
   ## Examples
 
       iex> {:ok, q} = SPQueue.start([])
-      iex> SPQueue.enqueue(q, %{"test" => 42})
+      iex> SPQueue.enqueue!(q, %{"test" => 42})
       %{"test" => 42}
-      iex> SPQueue.head(q)
+      iex> SPQueue.head!(q)
       %{"test" => 42}
       iex> SPQueue.reset(q)
       iex> SPQueue.stop(q)
 
   """
-  def enqueue(pq, msg) when is_map(msg) do
-    case enqueue_r(pq, msg) do
+  def enqueue!(pq, msg) when is_map(msg) do
+    case enqueue(pq, msg) do
       {:ok, record} -> record["msg"]
-      {:error, :full} -> nil
+      {:error, :full} -> raise SPQueue.FullError
     end
   end
 
@@ -182,17 +182,17 @@ defmodule SPQueue do
   ## Examples
 
       iex> {:ok, q} = SPQueue.start([])
-      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.enqueue_r(q, %{"test" => 42})
+      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.enqueue(q, %{"test" => 42})
       iex> id
       0
       iex> msg
       %{"test" => 42}
-      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue_r(q, id: id)
+      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue(q, id: id)
       iex> SPQueue.reset(q)
       iex> SPQueue.stop(q)
 
   """
-  def enqueue_r(pq, msg) when is_map(msg) do
+  def enqueue(pq, msg) when is_map(msg) do
     GenServer.call(pq, {:enqueue, msg})
   end
 
@@ -217,7 +217,7 @@ defmodule SPQueue do
   If the queue is full, wait `step` milliseconds to try again,
   with `timeout = timeout - step`.
 
-  Returns `msg` on success or raise "timed_out"
+  Returns `msg` on success or raise `SPQueue.TimedOutError`
   when the queue remains full after the `timeout` has expired.
 
   The default `timeout` is 1000 milliseconds or 1 second,
@@ -225,12 +225,12 @@ defmodule SPQueue do
   """
   def enqueue_wait!(pq, msg, opts \\ [timeout: 1000, step: 10]) do
     case enqueue(pq, msg) do
-      nil ->
+      {:error, :full} ->
         if Keyword.get(opts, :timeout) > 0 do
           Process.sleep(Keyword.get(opts, :step))
           enqueue_wait!(pq, msg, Keyword.get(opts, :timeout) - Keyword.get(opts, :step))
         else
-          raise "timed_out"
+          raise SPQueue.TimedOutError
         end
 
       result ->
@@ -243,31 +243,32 @@ defmodule SPQueue do
 
   The queue is identified by a pid or a genserver name.
 
-  Returns a msg `map` on success, `nil` when the queue is empty.
+  Returns a msg `map` on success, raises `SPQueue.EmptyError` when the queue is empty.
 
   The boolean `ack:` option allows to make a difference between
   successful message consumption or message rejection.
+
   Optionally an `id:` can be specified for the expected internal id,
-  which can be obtained from `enqueue_r/2` or `head_r/1`.
-  If the `id:` does not match, `nil` is returned and no dequeue happens.
+  which can be obtained from `enqueue/2` or `head/1`.
+  If the id does not match, `SPQueue.MismatchError` is raised and no dequeue happens.
 
   ## Examples
 
       iex> {:ok, q} = SPQueue.start([])
-      iex> SPQueue.enqueue(q, %{"test" => 42})
-      iex> SPQueue.dequeue(q)
+      iex> SPQueue.enqueue!(q, %{"test" => 42})
+      iex> SPQueue.dequeue!(q)
       %{"test" => 42}
       iex> SPQueue.dequeue(q)
-      nil
+      {:error, :empty}
       iex> SPQueue.reset(q)
       iex> SPQueue.stop(q)
 
   """
-  def dequeue(pq, opts \\ [ack: true]) do
-    case dequeue_r(pq, opts) do
+  def dequeue!(pq, opts \\ [ack: true]) do
+    case dequeue(pq, opts) do
       {:ok, record} -> record["msg"]
-      {:error, :empty} -> nil
-      {:error, :mismatch} -> nil
+      {:error, :empty} -> raise SPQueue.EmptyError
+      {:error, :mismatch} -> raise SPQueue.MismatchError
     end
   end
 
@@ -282,24 +283,25 @@ defmodule SPQueue do
 
   The boolean `ack:` option allows to make a difference between
   successful message consumption or message rejection.
+
   Optionally an `id:` can be specified for the expected internal id,
-  which can be obtained from `enqueue_r/2` or `head_r/1`.
-  If the `id:` does not match, `{:error, :mismatch}` is returned and no dequeue happens.
+  which can be obtained from `enqueue/2` or `head/1`.
+  If the id does not match, `{:error, :mismatch}` is returned and no dequeue happens.
 
   ## Examples
 
       iex> {:ok, q} = SPQueue.start([])
-      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.enqueue_r(q, %{"test" => 42})
+      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.enqueue(q, %{"test" => 42})
       iex> id
       0
       iex> msg
       %{"test" => 42}
-      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue_r(q, id: id)
+      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue(q, id: id)
       iex> SPQueue.reset(q)
       iex> SPQueue.stop(q)
 
   """
-  def dequeue_r(pq, opts \\ [ack: true]) do
+  def dequeue(pq, opts \\ [ack: true]) do
     GenServer.call(pq, {:dequeue, Keyword.merge([ack: true], opts)})
   end
 
@@ -307,7 +309,7 @@ defmodule SPQueue do
   Return the head of queue `pq`, the message that would be the result of dequeue,
   without actually removing it.
 
-  Return `nil` if the queue is empty.
+  Raise `SPQueue.EmptyError` if the queue is empty.
 
   The queue is identified by a pid or a genserver name.
 
@@ -315,32 +317,32 @@ defmodule SPQueue do
 
       iex> {:ok, q} = SPQueue.start([])
       iex> SPQueue.enqueue(q, %{"test" => 42})
-      iex> SPQueue.head(q)
+      iex> SPQueue.head!(q)
       %{"test" => 42}
       iex> SPQueue.dequeue(q)
       iex> SPQueue.head(q)
-      nil
+      {:error, :empty}
       iex> SPQueue.reset(q)
       iex> SPQueue.stop(q)
 
   """
-  def head(pq) do
-    case head_r(pq) do
+  def head!(pq) do
+    case head(pq) do
       {:ok, record} -> record["msg"]
-      {:error, :empty} -> nil
+      {:error, :empty} -> raise SPQueue.EmptyError
     end
   end
 
   @doc """
-  Return the head of queue `pq`, the message that would be the result of `dequeue_r/2`,
+  Return the head of queue `pq`, the message that would be the result of `dequeue/2`,
   without actually removing it.
 
   The queue is identified by a pid or a genserver name.
 
   Returns `{:ok, %{"id" => id, "ts" => ts, "msg" => msg}}` on success.
 
-  `id` is the internal identification that can be used in `dequeue_r/2`
-  to make sure the same message is removed that was read with `head_r/1`.
+  `id` is the internal identification that can be used in `dequeue/2`
+  to make sure the same message is removed that was read with `head/1`.
 
   Return `{:error, :empty}` if the queue is empty.
 
@@ -348,17 +350,17 @@ defmodule SPQueue do
 
       iex> {:ok, q} = SPQueue.start([])
       iex> SPQueue.enqueue(q, %{"test" => 42})
-      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.head_r(q)
+      iex> {:ok, %{"id" => id, "ts" => _ts, "msg" => msg}} = SPQueue.head(q)
       iex> id
       0
       iex> msg
       %{"test" => 42}
-      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue_r(q, id: id)
+      iex> {:ok, %{"id" => ^id, "ts" => _ts, "msg" => ^msg}} = SPQueue.dequeue(q, id: id)
       iex> SPQueue.reset(q)
       iex> SPQueue.stop(q)
 
   """
-  def head_r(pq) do
+  def head(pq) do
     GenServer.call(pq, :head)
   end
 
@@ -823,4 +825,35 @@ defmodule SPQueue do
   defp append_ndjson(io_data, file) do
     File.write!(file, [io_data, "\n"], [:append])
   end
+end
+
+# Exceptions
+
+defmodule SPQueue.EmptyError do
+  @moduledoc """
+  Raised when a `SPQueue.dequeue!/2` or `SPQueue.head!/1` operation are done on an empty queue
+  """
+  defexception message: "queue is empty"
+end
+
+defmodule SPQueue.FullError do
+  @moduledoc """
+  Raised when a `SPQueue.enqueue!/2` operation is done on a full queue
+  """
+  defexception message: "queue is full"
+end
+
+defmodule SPQueue.MismatchError do
+  @moduledoc """
+  Raised when the id argument of the `id:` option of a `SPQueue.dequeue!/2` operation
+  does not match the actual id at the head of the queue
+  """
+  defexception message: "internal queue id mismatch"
+end
+
+defmodule SPQueue.TimedOutError do
+  @moduledoc """
+  Raised when the timeout in `SPQueue.enqueue_wait!/2` expires
+  """
+  defexception message: "enqueue timed out"
 end

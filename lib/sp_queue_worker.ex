@@ -31,7 +31,7 @@ defmodule SPQueueWorker do
       ...>   queue_name: :pq,
       ...>   handler_function: fn m -> send(parent, {:msg, m}); :ack end
       ...> ])
-      iex> SPQueue.enqueue(:pq, %{"test" => 1})
+      iex> SPQueue.enqueue!(:pq, %{"test" => 1})
       iex> receive do {:msg, m} -> m end
       %{"test" => 1}
       iex> SPQueueWorker.stop(:pqw)
@@ -124,11 +124,11 @@ defmodule SPQueueWorker do
 
   defp drain_queue(pq, handler_function) do
     if !SPQueue.empty?(pq) do
-      message = SPQueue.head(pq)
+      {:ok, %{"msg" => message}} = SPQueue.head(pq)
 
       case apply(handler_function, [message]) do
-        :ack -> SPQueue.dequeue(pq, ack: true)
-        :nack -> SPQueue.dequeue(pq, ack: false)
+        :ack -> {:ok, _} = SPQueue.dequeue(pq, ack: true)
+        :nack -> {:ok, _} = SPQueue.dequeue(pq, ack: false)
       end
 
       drain_queue(pq, handler_function)
