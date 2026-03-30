@@ -112,7 +112,7 @@ defmodule SPQueue.Test do
     assert(opts[:name] == String.to_atom(queue_name))
     assert(opts[:queue_base_dir] == Path.join(tmp_dir, queue_name))
 
-    1..maximum_size |> Enum.each(fn i -> assert(SPQueue.enqueue(pq, %{"key" => i})) end)
+    1..maximum_size |> Enum.each(fn i -> SPQueue.enqueue!(pq, %{"key" => i}) end)
 
     opts = SPQueue.info(pq)
 
@@ -130,7 +130,7 @@ defmodule SPQueue.Test do
   test "full", %{line: line} = _context do
     pq = start_unique(line)
     max = SPQueue.info(pq)[:maximum_size]
-    1..max |> Enum.each(fn n -> assert(SPQueue.enqueue(pq, %{"n" => n})) end)
+    1..max |> Enum.each(fn n -> SPQueue.enqueue!(pq, %{"n" => n}) end)
     refute(SPQueue.empty?(pq))
     assert(SPQueue.count(pq) == max)
     assert(SPQueue.enqueue(pq, %{"n" => max + 1}) == {:error, :full})
