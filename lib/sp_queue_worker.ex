@@ -44,7 +44,7 @@ defmodule SPQueueWorker do
 
   """
 
-  defstruct queue_name: "pq",
+  defstruct queue_name: :pq,
             handler_function: nil,
             periodic_interval: :timer.seconds(5)
 
@@ -112,11 +112,13 @@ defmodule SPQueueWorker do
     {:noreply, new_state}
   end
 
-  defp handle_queue_messages(state) do
-    pq = Process.whereis(state.queue_name)
+  defp handle_queue_messages(
+         %__MODULE__{queue_name: queue_name, handler_function: handler_function} = state
+       ) do
+    pq = queue_name && Process.whereis(queue_name)
 
-    if pq do
-      drain_queue(pq, state.handler_function)
+    if pq && handler_function do
+      drain_queue(pq, handler_function)
     end
 
     state

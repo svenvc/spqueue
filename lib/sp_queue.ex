@@ -224,11 +224,14 @@ defmodule SPQueue do
   the default `step` is 10 milliseconds or 100 steps.
   """
   def enqueue_wait!(pq, msg, opts \\ [timeout: 1000, step: 10]) do
+    timeout = Keyword.get(opts, :timeout, 1000)
+    step = Keyword.get(opts, :step, 10)
+
     case enqueue(pq, msg) do
       {:error, :full} ->
-        if Keyword.get(opts, :timeout) > 0 do
-          Process.sleep(Keyword.get(opts, :step))
-          enqueue_wait!(pq, msg, Keyword.get(opts, :timeout) - Keyword.get(opts, :step))
+        if timeout > 0 do
+          Process.sleep(step)
+          enqueue_wait!(pq, msg, timeout: timeout - step, step: step)
         else
           raise SPQueue.TimedOutError
         end
@@ -441,7 +444,7 @@ defmodule SPQueue do
         {:reply, {:error, :mismatch}, state}
 
       true ->
-        {new_state, head} = dequeue_internal(state, Keyword.get(opts, :ack))
+        {new_state, head} = dequeue_internal(state, Keyword.get(opts, :ack, true))
         {:reply, {:ok, head}, new_state}
     end
   end

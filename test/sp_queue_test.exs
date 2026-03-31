@@ -4,9 +4,10 @@ defmodule SPQueue.Test do
 
   test "initial state", %{line: line} = _context do
     pq = start_unique(line)
-    assert(SPQueue.head(pq) == {:error, :empty})
-    assert(SPQueue.count(pq) == 0)
-    assert(SPQueue.empty?(pq))
+    assert SPQueue.head(pq) == {:error, :empty}
+    assert_raise SPQueue.EmptyError, fn -> SPQueue.head!(pq) end
+    assert SPQueue.count(pq) == 0
+    assert SPQueue.empty?(pq)
     stop(pq)
   end
 
@@ -18,7 +19,7 @@ defmodule SPQueue.Test do
       {:ok, %{"msg" => %{"n" => ^n}, "id" => _id, "ts" => _ts}} = SPQueue.enqueue(pq, %{"n" => n})
     end)
 
-    assert(SPQueue.count(pq) == 3)
+    assert SPQueue.count(pq) == 3
 
     {:ok, %{"msg" => %{"n" => 1}, "id" => _id, "ts" => _ts}} = SPQueue.head(pq)
 
@@ -27,7 +28,7 @@ defmodule SPQueue.Test do
       {:ok, %{"msg" => %{"n" => ^n}, "id" => _id, "ts" => _ts}} = SPQueue.dequeue(pq)
     end)
 
-    assert(SPQueue.empty?(pq))
+    assert SPQueue.empty?(pq)
     stop(pq)
   end
 
@@ -36,13 +37,13 @@ defmodule SPQueue.Test do
 
     1..3 |> Enum.each(fn n -> SPQueue.enqueue!(pq, %{"n" => n}) end)
 
-    assert(SPQueue.count(pq) == 3)
+    assert SPQueue.count(pq) == 3
 
-    assert(SPQueue.head!(pq) == %{"n" => 1})
+    assert SPQueue.head!(pq) == %{"n" => 1}
 
-    1..3 |> Enum.each(fn n -> assert(SPQueue.dequeue!(pq) |> Map.get("n") == n) end)
+    1..3 |> Enum.each(fn n -> assert SPQueue.dequeue!(pq) |> Map.get("n") == n end)
 
-    assert(SPQueue.empty?(pq))
+    assert SPQueue.empty?(pq)
     stop(pq)
   end
 
@@ -50,43 +51,43 @@ defmodule SPQueue.Test do
     pq = start_unique(line)
     1..3 |> Enum.each(fn n -> SPQueue.enqueue(pq, %{"n" => n}) end)
     SPQueue.dequeue(pq)
-    assert(SPQueue.count(pq) == 2)
-    assert(SPQueue.head!(pq) == %{"n" => 2})
+    assert SPQueue.count(pq) == 2
+    assert SPQueue.head!(pq) == %{"n" => 2}
     stop(pq, clean: false)
     pq = start_unique(line, clean: false)
-    assert(SPQueue.count(pq) == 2)
-    assert(SPQueue.head!(pq) == %{"n" => 2})
+    assert SPQueue.count(pq) == 2
+    assert SPQueue.head!(pq) == %{"n" => 2}
     stop(pq)
   end
 
   test "multiple segments 32/16", %{line: line} = _context do
     pq = start_unique(line)
     1..32 |> Enum.each(fn n -> SPQueue.enqueue(pq, %{"n" => n}) end)
-    1..16 |> Enum.each(fn n -> assert(SPQueue.dequeue!(pq) |> Map.get("n") == n) end)
-    assert(SPQueue.head!(pq) == %{"n" => 17})
-    assert(SPQueue.count(pq) == 16)
+    1..16 |> Enum.each(fn n -> assert SPQueue.dequeue!(pq) |> Map.get("n") == n end)
+    assert SPQueue.head!(pq) == %{"n" => 17}
+    assert SPQueue.count(pq) == 16
     stop(pq)
   end
 
   test "multiple segments 40", %{line: line} = _context do
     pq = start_unique(line)
     1..40 |> Enum.each(fn n -> SPQueue.enqueue(pq, %{"n" => n}) end)
-    assert(SPQueue.count(pq) == 40)
-    1..40 |> Enum.each(fn n -> assert(SPQueue.dequeue!(pq) == %{"n" => n}) end)
-    assert(SPQueue.empty?(pq))
+    assert SPQueue.count(pq) == 40
+    1..40 |> Enum.each(fn n -> assert SPQueue.dequeue!(pq) == %{"n" => n} end)
+    assert SPQueue.empty?(pq)
     stop(pq)
   end
 
   test "load state multiple segments", %{line: line} = _context do
     pq = start_unique(line)
     1..32 |> Enum.each(fn n -> SPQueue.enqueue(pq, %{"n" => n}) end)
-    1..16 |> Enum.each(fn n -> assert(SPQueue.dequeue!(pq) |> Map.get("n") == n) end)
-    assert(SPQueue.head!(pq) == %{"n" => 17})
-    assert(SPQueue.count(pq) == 16)
+    1..16 |> Enum.each(fn n -> assert SPQueue.dequeue!(pq) |> Map.get("n") == n end)
+    assert SPQueue.head!(pq) == %{"n" => 17}
+    assert SPQueue.count(pq) == 16
     stop(pq, clean: false)
     pq = start_unique(line, clean: false)
-    assert(SPQueue.head!(pq) == %{"n" => 17})
-    assert(SPQueue.count(pq) == 16)
+    assert SPQueue.head!(pq) == %{"n" => 17}
+    assert SPQueue.count(pq) == 16
     stop(pq)
   end
 
@@ -107,22 +108,22 @@ defmodule SPQueue.Test do
 
     opts = SPQueue.info(pq)
 
-    assert(opts[:count] == 0)
-    assert(opts[:maximum_size] == maximum_size)
-    assert(opts[:name] == String.to_atom(queue_name))
-    assert(opts[:queue_base_dir] == Path.join(tmp_dir, queue_name))
+    assert opts[:count] == 0
+    assert opts[:maximum_size] == maximum_size
+    assert opts[:name] == String.to_atom(queue_name)
+    assert opts[:queue_base_dir] == Path.join(tmp_dir, queue_name)
 
     1..maximum_size |> Enum.each(fn i -> SPQueue.enqueue!(pq, %{"key" => i}) end)
 
     opts = SPQueue.info(pq)
 
-    assert(opts[:count] == maximum_size)
+    assert opts[:count] == maximum_size
 
-    1..maximum_size |> Enum.each(fn i -> assert(SPQueue.dequeue!(pq) == %{"key" => i}) end)
+    1..maximum_size |> Enum.each(fn i -> assert SPQueue.dequeue!(pq) == %{"key" => i} end)
 
     opts = SPQueue.info(pq)
 
-    assert(opts[:count] == 0)
+    assert opts[:count] == 0
 
     stop(pq)
   end
@@ -132,8 +133,14 @@ defmodule SPQueue.Test do
     max = SPQueue.info(pq)[:maximum_size]
     1..max |> Enum.each(fn n -> SPQueue.enqueue!(pq, %{"n" => n}) end)
     refute(SPQueue.empty?(pq))
-    assert(SPQueue.count(pq) == max)
-    assert(SPQueue.enqueue(pq, %{"n" => max + 1}) == {:error, :full})
+    assert SPQueue.count(pq) == max
+    assert SPQueue.enqueue(pq, %{"n" => max + 1}) == {:error, :full}
+    assert_raise SPQueue.FullError, fn -> SPQueue.enqueue!(pq, %{"n" => max + 1}) end
+
+    assert_raise SPQueue.TimedOutError, fn ->
+      SPQueue.enqueue_wait!(pq, %{"n" => max + 1}, timeout: 10, step: 2)
+    end
+
     stop(pq)
   end
 
@@ -143,12 +150,12 @@ defmodule SPQueue.Test do
     0..4
     |> Enum.each(fn round ->
       1..40 |> Enum.each(fn i -> {:ok, _} = SPQueue.enqueue(pq, %{"n" => round * 40 + i}) end)
-      assert(SPQueue.count(pq) == 40)
+      assert SPQueue.count(pq) == 40
       1..40 |> Enum.each(fn _i -> {:ok, _} = SPQueue.dequeue(pq) end)
-      assert(SPQueue.empty?(pq))
+      assert SPQueue.empty?(pq)
     end)
 
-    assert(Enum.empty?(queue_base_dir(pq) |> File.ls!()))
+    assert Enum.empty?(queue_base_dir(pq) |> File.ls!())
 
     stop(pq)
   end
@@ -171,7 +178,7 @@ defmodule SPQueue.Test do
       {total_enqueued_next, total_dequeued_next}
     end)
 
-    assert(Enum.empty?(queue_base_dir(pq) |> File.ls!()))
+    assert Enum.empty?(queue_base_dir(pq) |> File.ls!())
     stop(pq)
   end
 
@@ -182,6 +189,7 @@ defmodule SPQueue.Test do
     {:ok, %{"id" => id} = _record} = SPQueue.head(pq)
     {:ok, _record} = SPQueue.dequeue(pq, id: id)
     {:error, :mismatch} = SPQueue.dequeue(pq, id: id)
+    assert_raise SPQueue.MismatchError, fn -> SPQueue.dequeue!(pq, id: id) end
     1..4 |> Enum.each(fn i -> {:ok, _record} = SPQueue.dequeue(pq, id: id + i) end)
     {:error, :empty} = SPQueue.dequeue(pq)
     {:error, :empty} = SPQueue.head(pq)
@@ -191,9 +199,9 @@ defmodule SPQueue.Test do
   test "to list conversion", %{line: line} = _context do
     pq = start_unique(line)
     1..10 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
-    assert(SPQueue.to_list(pq) == 1..10 |> Enum.map(fn i -> %{"i" => i} end))
+    assert SPQueue.to_list(pq) == 1..10 |> Enum.map(fn i -> %{"i" => i} end)
     11..50 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
-    assert(SPQueue.to_list(pq) == 1..50 |> Enum.map(fn i -> %{"i" => i} end))
+    assert SPQueue.to_list(pq) == 1..50 |> Enum.map(fn i -> %{"i" => i} end)
     stop(pq)
   end
 
@@ -245,7 +253,36 @@ defmodule SPQueue.Test do
     pq = start_unique(line, delegate: worker)
     1..limit |> Enum.each(fn i -> SPQueue.enqueue_wait!(pq, %{"i" => i}) end)
     assert_receive :done
-    assert(SPQueue.empty?(pq))
+    assert SPQueue.empty?(pq)
+    stop(pq)
+    SPQueueWorker.stop(worker)
+  end
+
+  test "worker periodic interval", %{line: line} = _context do
+    queue_name = String.to_atom(unique_name_for_test(line))
+
+    pq = start_unique(line)
+    ~w(x y z) |> Enum.each(fn c -> SPQueue.enqueue!(pq, %{"c" => c}) end)
+    stop(pq, clean: false)
+
+    worker_name = String.to_atom("test-worker-#{line}")
+    test_process = self()
+
+    {:ok, worker} =
+      SPQueueWorker.start(
+        queue_name: queue_name,
+        name: worker_name,
+        handler_function: fn %{"c" => c} = _msg ->
+          if c == "z", do: send(test_process, :done)
+          :ack
+        end,
+        periodic_interval: 10
+      )
+
+    pq = start_unique(line, delegate: worker, clean: false)
+
+    assert_receive :done
+    assert SPQueue.empty?(pq)
     stop(pq)
     SPQueueWorker.stop(worker)
   end
