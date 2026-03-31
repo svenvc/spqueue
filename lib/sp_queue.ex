@@ -425,62 +425,7 @@ defmodule SPQueue do
     if full?(state) do
       {:reply, {:error, :full}, state}
     else
-      # this is the record that we write to the enqueue file
-      record = %{
-        "id" => state.enqueue_count,
-        "ts" => to_string(DateTime.utc_now()),
-        "msg" => msg
-      }
-
-      # make sure JSON encoding succeeds
-      json = JSON.encode_to_iodata!(record)
-
-      # now append to the enqueue log file
-      log_enqueue(state, json)
-
-      # update the in memory state
-      new_state =
-        case segments_count(state) do
-          1 ->
-            # there is only 1 segment, i.e. first and last are the same, only first is used
-            if state.enqueue_count + 1 == (state.first_segment_id + 1) * state.segment_size do
-              # first_segment will be full after this, make sure last_segment will be used next time
-              %{
-                state
-                | enqueue_count: state.enqueue_count + 1,
-                  first_segment: :queue.in(record, state.first_segment),
-                  last_segment: :queue.new(),
-                  last_segment_id: state.last_segment_id + 1
-              }
-            else
-              # normal addition to first_segment
-              %{
-                state
-                | enqueue_count: state.enqueue_count + 1,
-                  first_segment: :queue.in(record, state.first_segment)
-              }
-            end
-
-          _ ->
-            if state.enqueue_count + 1 == (state.last_segment_id + 1) * state.segment_size do
-              # last_segment will be full after this, arrange for a new last_segment to be used next time
-              # there is no need to actually add to the in-memory segment as we start a new one anyway
-              %{
-                state
-                | enqueue_count: state.enqueue_count + 1,
-                  last_segment: :queue.new(),
-                  last_segment_id: state.last_segment_id + 1
-              }
-            else
-              # normal addition to last_segment
-              %{
-                state
-                | enqueue_count: state.enqueue_count + 1,
-                  last_segment: :queue.in(record, state.last_segment)
-              }
-            end
-        end
-
+      {new_state, record} = enqueue_internal(state, msg)
       {:reply, {:ok, record}, notify_delegate(new_state)}
     end
   end
@@ -496,63 +441,7 @@ defmodule SPQueue do
         {:reply, {:error, :mismatch}, state}
 
       true ->
-        # get a hold of the head without making modifications
-        head = :queue.head(state.first_segment)
-
-        # this is the record that we write to the dequeue file
-        record = %{
-          "id" => head["id"],
-          "ts" => to_string(DateTime.utc_now()),
-          "ack" => Keyword.get(opts, :ack)
-        }
-
-        # make sure JSON encoding succeeds
-        json = JSON.encode_to_iodata!(record)
-
-        # now append to the dequeue log file
-        log_dequeue(state, json)
-
-        # update the in memory state
-        {{:value, head}, rest} = :queue.out(state.first_segment)
-
-        new_state =
-          if :queue.is_empty(rest) && segments_count(state) > 1 do
-            # more than 1 segment is in use and it will be empty afterwards
-            case segments_count(state) do
-              2 ->
-                # exactly 2 segments in use, shift the last one to the first,
-                # empty the last, and clean up files
-                %{
-                  state
-                  | first_segment: state.last_segment,
-                    first_segment_id: state.last_segment_id,
-                    last_segment: :queue.new(),
-                    dequeue_count: state.dequeue_count + 1
-                }
-                |> gc_unused_segments()
-
-              _ ->
-                # more the 2 segments in use, load a new segment as first one
-                # and clean up files
-                new_segment_id = state.first_segment_id + 1
-
-                %{
-                  state
-                  | first_segment: :queue.from_list(load_segment(state, new_segment_id)),
-                    first_segment_id: new_segment_id,
-                    dequeue_count: state.dequeue_count + 1
-                }
-                |> gc_unused_segments()
-            end
-          else
-            # only first segment is in used, normal removal
-            %{
-              state
-              | first_segment: rest,
-                dequeue_count: state.dequeue_count + 1
-            }
-          end
-
+        {new_state, head} = dequeue_internal(state, Keyword.get(opts, :ack))
         {:reply, {:ok, head}, new_state}
     end
   end
@@ -581,7 +470,7 @@ defmodule SPQueue do
     else
       File.ls!(base_dir_path)
       |> Enum.filter(fn file -> Path.extname(file) == ".ndjson" end)
-      |> Enum.map(fn file -> File.rm!(Path.join(base_dir_path, file)) end)
+      |> Enum.each(fn file -> File.rm!(Path.join(base_dir_path, file)) end)
     end
 
     {:reply, true,
@@ -631,6 +520,127 @@ defmodule SPQueue do
   end
 
   # internals
+
+  defp enqueue_internal(state, msg) do
+    # this is the record that we write to the enqueue file
+    record = %{
+      "id" => state.enqueue_count,
+      "ts" => to_string(DateTime.utc_now()),
+      "msg" => msg
+    }
+
+    # make sure JSON encoding succeeds
+    json = JSON.encode_to_iodata!(record)
+
+    # now append to the enqueue log file
+    log_enqueue(state, json)
+
+    # update the in memory state
+    new_state =
+      case segments_count(state) do
+        1 ->
+          # there is only 1 segment, i.e. first and last are the same, only first is used
+          if state.enqueue_count + 1 == (state.first_segment_id + 1) * state.segment_size do
+            # first_segment will be full after this, make sure last_segment will be used next time
+            %{
+              state
+              | enqueue_count: state.enqueue_count + 1,
+                first_segment: :queue.in(record, state.first_segment),
+                last_segment: :queue.new(),
+                last_segment_id: state.last_segment_id + 1
+            }
+          else
+            # normal addition to first_segment
+            %{
+              state
+              | enqueue_count: state.enqueue_count + 1,
+                first_segment: :queue.in(record, state.first_segment)
+            }
+          end
+
+        _ ->
+          if state.enqueue_count + 1 == (state.last_segment_id + 1) * state.segment_size do
+            # last_segment will be full after this, arrange for a new last_segment to be used next time
+            # there is no need to actually add to the in-memory segment as we start a new one anyway
+            %{
+              state
+              | enqueue_count: state.enqueue_count + 1,
+                last_segment: :queue.new(),
+                last_segment_id: state.last_segment_id + 1
+            }
+          else
+            # normal addition to last_segment
+            %{
+              state
+              | enqueue_count: state.enqueue_count + 1,
+                last_segment: :queue.in(record, state.last_segment)
+            }
+          end
+      end
+
+    {new_state, record}
+  end
+
+  defp dequeue_internal(state, ack) do
+    # get a hold of the head without making modifications
+    head = :queue.head(state.first_segment)
+
+    # this is the record that we write to the dequeue file
+    record = %{
+      "id" => head["id"],
+      "ts" => to_string(DateTime.utc_now()),
+      "ack" => ack
+    }
+
+    # make sure JSON encoding succeeds
+    json = JSON.encode_to_iodata!(record)
+
+    # now append to the dequeue log file
+    log_dequeue(state, json)
+
+    # update the in memory state
+    {{:value, head}, rest} = :queue.out(state.first_segment)
+
+    new_state =
+      if :queue.is_empty(rest) && segments_count(state) > 1 do
+        # more than 1 segment is in use and it will be empty afterwards
+        case segments_count(state) do
+          2 ->
+            # exactly 2 segments in use, shift the last one to the first,
+            # empty the last, and clean up files
+            %{
+              state
+              | first_segment: state.last_segment,
+                first_segment_id: state.last_segment_id,
+                last_segment: :queue.new(),
+                dequeue_count: state.dequeue_count + 1
+            }
+            |> gc_unused_segments()
+
+          _ ->
+            # more the 2 segments in use, load a new segment as first one
+            # and clean up files
+            new_segment_id = state.first_segment_id + 1
+
+            %{
+              state
+              | first_segment: :queue.from_list(load_segment(state, new_segment_id)),
+                first_segment_id: new_segment_id,
+                dequeue_count: state.dequeue_count + 1
+            }
+            |> gc_unused_segments()
+        end
+      else
+        # only first segment is in used, normal removal
+        %{
+          state
+          | first_segment: rest,
+            dequeue_count: state.dequeue_count + 1
+        }
+      end
+
+    {new_state, head}
+  end
 
   defp queued_count(
          %__MODULE__{enqueue_count: enqueue_count, dequeue_count: dequeue_count} = _state
@@ -780,9 +790,10 @@ defmodule SPQueue do
     # the id of the current first segment are no longer needed
 
     File.ls!(base_dir_path)
-    |> Enum.filter(fn file -> Path.extname(file) == ".ndjson" end)
-    |> Enum.filter(fn file -> segment_id_from_file(file) < first_segment_id end)
-    |> Enum.map(fn file -> File.rm!(Path.join(base_dir_path, file)) end)
+    |> Enum.filter(fn file ->
+      Path.extname(file) == ".ndjson" && segment_id_from_file(file) < first_segment_id
+    end)
+    |> Enum.each(fn file -> File.rm!(Path.join(base_dir_path, file)) end)
 
     # note that if the current segment is full and then fully read out,
     # all log files will be removed. if the queue would then be restarted,

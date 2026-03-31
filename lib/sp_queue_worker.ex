@@ -126,7 +126,7 @@ defmodule SPQueueWorker do
     if !SPQueue.empty?(pq) do
       {:ok, %{"msg" => message}} = SPQueue.head(pq)
 
-      case apply(handler_function, [message]) do
+      case handler_function.(message) do
         :ack -> {:ok, _} = SPQueue.dequeue(pq, ack: true)
         :nack -> {:ok, _} = SPQueue.dequeue(pq, ack: false)
       end
