@@ -29,6 +29,7 @@ defmodule SPQueue.Test do
     end)
 
     assert SPQueue.empty?(pq)
+    {:error, :empty} = SPQueue.dequeue(pq)
     stop(pq)
   end
 
@@ -44,6 +45,7 @@ defmodule SPQueue.Test do
     1..3 |> Enum.each(fn n -> assert SPQueue.dequeue!(pq) |> Map.get("n") == n end)
 
     assert SPQueue.empty?(pq)
+    assert_raise SPQueue.EmptyError, fn -> SPQueue.dequeue!(pq) end
     stop(pq)
   end
 
@@ -160,6 +162,20 @@ defmodule SPQueue.Test do
     stop(pq)
   end
 
+  test "reset", %{line: line} = _context do
+    pq = start_unique(line)
+
+    1..15 |> Enum.each(fn i -> {:ok, _} = SPQueue.enqueue(pq, %{"n" => i}) end)
+    assert SPQueue.count(pq) == 15
+    1..10 |> Enum.each(fn _i -> {:ok, _} = SPQueue.dequeue(pq) end)
+    assert SPQueue.count(pq) == 5
+
+    SPQueue.reset(pq, clean: false)
+    assert Enum.empty?(queue_base_dir(pq) |> File.ls!())
+    assert SPQueue.empty?(pq)
+    stop(pq)
+  end
+
   test "harmonica", %{line: line} = _context do
     pq = start_unique(line)
 
@@ -198,9 +214,13 @@ defmodule SPQueue.Test do
 
   test "to list conversion", %{line: line} = _context do
     pq = start_unique(line)
-    1..10 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
+    {:ok, _} = SPQueue.enqueue(pq, %{"i" => 1})
+    assert SPQueue.to_list(pq) == [%{"i" => 1}]
+    result = SPQueue.enqueue_list(pq, 2..10 |> Enum.map(fn i -> %{"i" => i} end))
+    assert Enum.all?(result, fn r -> elem(r, 0) == :ok end)
     assert SPQueue.to_list(pq) == 1..10 |> Enum.map(fn i -> %{"i" => i} end)
-    11..50 |> Enum.each(fn i -> SPQueue.enqueue(pq, %{"i" => i}) end)
+    result = SPQueue.enqueue_list(pq, 11..50 |> Enum.map(fn i -> %{"i" => i} end))
+    assert Enum.all?(result, fn r -> elem(r, 0) == :ok end)
     assert SPQueue.to_list(pq) == 1..50 |> Enum.map(fn i -> %{"i" => i} end)
     stop(pq)
   end
