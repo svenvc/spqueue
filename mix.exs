@@ -11,6 +11,9 @@ defmodule SPQueue.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
+      # dev
+      aliases: aliases(),
+
       # hex
       package: package(),
       description: "A Simple Persistent Queue",
@@ -33,8 +36,25 @@ defmodule SPQueue.MixProject do
   defp deps do
     [
       {:ex_doc, "~> 0.34", only: :dev, runtime: false, warn_if_outdated: true},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
+  end
+
+  defp aliases do
+    [
+      ci: [
+        "compile --force --warnings-as-errors",
+        "format --check-formatted",
+        "credo --strict",
+        "dialyzer",
+        "test --warnings-as-errors"
+      ]
+    ]
+  end
+
+  def cli do
+    [preferred_envs: [ci: :test]]
   end
 
   defp docs do
